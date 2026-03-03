@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { FormData, initialFormData, formSteps, PlanType } from '@/types/form';
 import { BusinessType, AccountingFormData, initialAccountingFormData, accountingFormSteps } from '@/types/accounting-form';
 import { BusinessTypeSelector } from './BusinessTypeSelector';
@@ -12,15 +12,36 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+const STORAGE_KEY = 'kenkya-form-progress';
+
+function loadSaved<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed[key] ?? fallback;
+  } catch { return fallback; }
+}
+
 export function MultiStepForm() {
-  const [businessType, setBusinessType] = useState<BusinessType | null>(null);
-  const [formData, setFormData] = useState<FormData>(initialFormData);
-  const [acctFormData, setAcctFormData] = useState<AccountingFormData>(initialAccountingFormData);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [businessType, setBusinessType] = useState<BusinessType | null>(() => loadSaved('businessType', null));
+  const [formData, setFormData] = useState<FormData>(() => loadSaved('formData', initialFormData));
+  const [acctFormData, setAcctFormData] = useState<AccountingFormData>(() => loadSaved('acctFormData', initialAccountingFormData));
+  const [currentStepIndex, setCurrentStepIndex] = useState(() => loadSaved('currentStepIndex', 0));
   const [isAnimating, setIsAnimating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const { toast } = useToast();
+
+  // Auto-save progress
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      businessType,
+      currentStepIndex,
+      formData,
+      acctFormData,
+    }));
+  }, [businessType, currentStepIndex, formData, acctFormData]);
 
   // Professional flow steps
   const visibleProfessionalSteps = useMemo(() => {
@@ -140,6 +161,7 @@ export function MultiStepForm() {
         if (error) throw error;
       }
 
+      localStorage.removeItem(STORAGE_KEY);
       setIsComplete(true);
       toast({ title: 'Formulário enviado!', description: 'Recebemos suas informações com sucesso.' });
     } catch (error) {
@@ -151,6 +173,7 @@ export function MultiStepForm() {
   };
 
   const handleReset = () => {
+    localStorage.removeItem(STORAGE_KEY);
     setFormData(initialFormData);
     setAcctFormData(initialAccountingFormData);
     setCurrentStepIndex(0);
